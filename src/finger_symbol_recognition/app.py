@@ -13,7 +13,9 @@ from finger_symbol_recognition.classifier import EMNISTClassifier
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
-def prepare_canvas(canvas: np.ndarray, target_size: tuple[int, int] = (28, 28)) -> np.ndarray | None:
+def prepare_canvas(
+    canvas: np.ndarray, target_size: tuple[int, int] = (28, 28)
+) -> np.ndarray | None:
     if canvas is None:
         return None
 
@@ -51,7 +53,9 @@ class AirDrawingApp:
         self,
         config_path: Path | str = PROJECT_ROOT / "config.yaml",
         hand_model_path: Path | str = PROJECT_ROOT / "models" / "hand_landmarker.task",
-        classifier_model_path: Path | str = PROJECT_ROOT / "models" / "emnist_balanced.onnx",
+        classifier_model_path: Path | str = PROJECT_ROOT
+        / "models"
+        / "emnist_balanced.onnx",
     ):
         self.config_path = Path(config_path)
         self.hand_model_path = Path(hand_model_path)
@@ -74,13 +78,22 @@ class AirDrawingApp:
         self.window_name = cam_cfg.get("window_name", "Air Drawing")
 
         draw_cfg = config.get("drawing", {})
-        self.main_color = tuple(draw_cfg.get("main_color", config.get("main_color", [255, 0, 0])))
-        self.brush_thickness = draw_cfg.get("brush_thickness", config.get("brush_thickness", 8))
-        self.text_block_color = tuple(draw_cfg.get("text_block_color", config.get("text_block_color", [255, 255, 0])))
+        self.main_color = tuple(
+            draw_cfg.get("main_color", config.get("main_color", [255, 0, 0]))
+        )
+        self.brush_thickness = draw_cfg.get(
+            "brush_thickness", config.get("brush_thickness", 8)
+        )
+        self.text_block_color = tuple(
+            draw_cfg.get(
+                "text_block_color", config.get("text_block_color", [255, 255, 0])
+            )
+        )
         self.banner_alpha = draw_cfg.get("banner_alpha", 0.4)
         self.confidence_threshold = draw_cfg.get("confidence_threshold", 0.7)
 
         gest_cfg = config.get("gestures", {})
+        self.draw_delay = gest_cfg.get("draw_delay", 0.5)
         self.swipe_distance_threshold = gest_cfg.get("swipe_distance_threshold", 0.12)
         self.swipe_ratio_threshold = gest_cfg.get("swipe_ratio_threshold", 1.3)
         self.swipe_time_window = gest_cfg.get("swipe_time_window", 0.4)
@@ -119,9 +132,13 @@ class AirDrawingApp:
             min_tracking_confidence=0.5,
         )
 
-        with self.open_camera() as cap, HandLandmarker.create_from_options(options) as landmarker:
+        with (
+            self.open_camera() as cap,
+            HandLandmarker.create_from_options(options) as landmarker,
+        ):
             canvas = None
             prev_x, prev_y = None, None
+            draw_start_time = None
             holding_save = False
             holding_backspace = False
             last_timestamp_ms = 0
@@ -161,33 +178,69 @@ class AirDrawingApp:
                 live_prep_canvas = prepare_canvas(canvas, target_size=(28, 28))
                 top_predictions = None
                 if live_prep_canvas is not None:
-                    top_predictions = self.classifier.predict_top_k(live_prep_canvas, k=3)
+                    top_predictions = self.classifier.predict_top_k(
+                        live_prep_canvas, k=3
+                    )
 
                 if results.hand_landmarks:
                     for hand in results.hand_landmarks:
                         is_draw = (
-                            eucl_dist(hand[8], hand[0]) > 0.9 * eucl_dist(hand[6], hand[0])
-                        ) and (eucl_dist(hand[12], hand[0]) < 0.9 * eucl_dist(hand[8], hand[0]))
+                            eucl_dist(hand[8], hand[0])
+                            > 0.9 * eucl_dist(hand[6], hand[0])
+                        ) and (
+                            eucl_dist(hand[12], hand[0])
+                            < 0.9 * eucl_dist(hand[8], hand[0])
+                        )
 
                         is_backspace = (
-                            (eucl_dist(hand[20], hand[0]) > eucl_dist(hand[18], hand[0]))
-                            and (eucl_dist(hand[8], hand[0]) < eucl_dist(hand[6], hand[0]))
-                            and (eucl_dist(hand[12], hand[0]) < eucl_dist(hand[10], hand[0]))
-                            and (eucl_dist(hand[16], hand[0]) < eucl_dist(hand[14], hand[0]))
+                            (
+                                eucl_dist(hand[20], hand[0])
+                                > eucl_dist(hand[18], hand[0])
+                            )
+                            and (
+                                eucl_dist(hand[8], hand[0])
+                                < eucl_dist(hand[6], hand[0])
+                            )
+                            and (
+                                eucl_dist(hand[12], hand[0])
+                                < eucl_dist(hand[10], hand[0])
+                            )
+                            and (
+                                eucl_dist(hand[16], hand[0])
+                                < eucl_dist(hand[14], hand[0])
+                            )
                         )
 
                         is_clear = (
                             (eucl_dist(hand[8], hand[0]) < eucl_dist(hand[6], hand[0]))
-                            and (eucl_dist(hand[12], hand[0]) < eucl_dist(hand[10], hand[0]))
-                            and (eucl_dist(hand[16], hand[0]) < eucl_dist(hand[14], hand[0]))
-                            and (eucl_dist(hand[20], hand[0]) < eucl_dist(hand[18], hand[0]))
+                            and (
+                                eucl_dist(hand[12], hand[0])
+                                < eucl_dist(hand[10], hand[0])
+                            )
+                            and (
+                                eucl_dist(hand[16], hand[0])
+                                < eucl_dist(hand[14], hand[0])
+                            )
+                            and (
+                                eucl_dist(hand[20], hand[0])
+                                < eucl_dist(hand[18], hand[0])
+                            )
                         )
 
                         is_palm_open = (
                             (eucl_dist(hand[8], hand[0]) > eucl_dist(hand[6], hand[0]))
-                            and (eucl_dist(hand[12], hand[0]) > eucl_dist(hand[10], hand[0]))
-                            and (eucl_dist(hand[16], hand[0]) > eucl_dist(hand[14], hand[0]))
-                            and (eucl_dist(hand[20], hand[0]) > eucl_dist(hand[18], hand[0]))
+                            and (
+                                eucl_dist(hand[12], hand[0])
+                                > eucl_dist(hand[10], hand[0])
+                            )
+                            and (
+                                eucl_dist(hand[16], hand[0])
+                                > eucl_dist(hand[14], hand[0])
+                            )
+                            and (
+                                eucl_dist(hand[20], hand[0])
+                                > eucl_dist(hand[18], hand[0])
+                            )
                         )
 
                         is_swipe_erased = False
@@ -196,13 +249,21 @@ class AirDrawingApp:
                             palm_center_y = (hand[0].y + hand[9].y) / 2.0
                             palm_history.append((now, palm_center_x, palm_center_y))
 
-                            if len(palm_history) >= 4 and (now - last_erase_time > self.swipe_cooldown):
-                                valid_points = [p for p in palm_history if now - p[0] <= self.swipe_time_window]
+                            if len(palm_history) >= 4 and (
+                                now - last_erase_time > self.swipe_cooldown
+                            ):
+                                valid_points = [
+                                    p
+                                    for p in palm_history
+                                    if now - p[0] <= self.swipe_time_window
+                                ]
                                 if len(valid_points) >= 3:
                                     dx = palm_center_x - valid_points[0][1]
                                     dy = palm_center_y - valid_points[0][2]
 
-                                    if abs(dx) > self.swipe_distance_threshold and abs(dx) > self.swipe_ratio_threshold * abs(dy):
+                                    if abs(dx) > self.swipe_distance_threshold and abs(
+                                        dx
+                                    ) > self.swipe_ratio_threshold * abs(dy):
                                         text = ""
                                         canvas = np.zeros_like(frame)
                                         last_erase_time = now
@@ -216,17 +277,24 @@ class AirDrawingApp:
                         if is_draw and not is_palm_open:
                             holding_save = False
                             holding_backspace = False
-                            it_x, it_y = int(hand[8].x * w), int(hand[8].y * h)
-                            if prev_x is not None:
-                                cv2.line(
-                                    canvas,
-                                    (prev_x, prev_y),
-                                    (it_x, it_y),
-                                    color=self.main_color,
-                                    thickness=self.brush_thickness,
-                                )
-                            prev_x, prev_y = it_x, it_y
+                            if draw_start_time is None:
+                                draw_start_time = now
+
+                            if (now - draw_start_time) >= self.draw_delay:
+                                it_x, it_y = int(hand[8].x * w), int(hand[8].y * h)
+                                if prev_x is not None:
+                                    cv2.line(
+                                        canvas,
+                                        (prev_x, prev_y),
+                                        (it_x, it_y),
+                                        color=self.main_color,
+                                        thickness=self.brush_thickness,
+                                    )
+                                prev_x, prev_y = it_x, it_y
+                            else:
+                                prev_x, prev_y = None, None
                         elif is_backspace:
+                            draw_start_time = None
                             if not holding_backspace:
                                 if len(text) > 0:
                                     text = text[:-1]
@@ -235,14 +303,19 @@ class AirDrawingApp:
                             holding_save = False
                             prev_x, prev_y = None, None
                         elif is_clear:
+                            draw_start_time = None
                             canvas = np.zeros_like(frame)
                             prev_x, prev_y = None, None
                             holding_save = False
                             holding_backspace = False
                         elif is_palm_open and not is_swipe_erased:
+                            draw_start_time = None
                             holding_backspace = False
                             if not holding_save:
-                                if top_predictions is not None and len(top_predictions) > 0:
+                                if (
+                                    top_predictions is not None
+                                    and len(top_predictions) > 0
+                                ):
                                     best_char, best_conf = top_predictions[0]
                                     if best_conf > self.confidence_threshold:
                                         text += best_char
@@ -250,10 +323,12 @@ class AirDrawingApp:
                                 holding_save = True
                             prev_x, prev_y = None, None
                         else:
+                            draw_start_time = None
                             holding_save = False
                             holding_backspace = False
                             prev_x, prev_y = None, None
                 else:
+                    draw_start_time = None
                     holding_save = False
                     holding_backspace = False
                     prev_x, prev_y = None, None
@@ -272,7 +347,11 @@ class AirDrawingApp:
                     cv2.rectangle(overlay, (25, 25), (w - 25, 85), banner_color_bgr, -1)
 
                     result_frame = cv2.addWeighted(
-                        overlay, self.banner_alpha, result_frame, 1.0 - self.banner_alpha, 0
+                        overlay,
+                        self.banner_alpha,
+                        result_frame,
+                        1.0 - self.banner_alpha,
+                        0,
                     )
 
                     cv2.putText(
@@ -288,7 +367,9 @@ class AirDrawingApp:
 
                 if now < backspace_notification_until:
                     overlay = result_frame.copy()
-                    cv2.rectangle(overlay, (25, h - 70), (330, h - 20), (0, 140, 255), -1)
+                    cv2.rectangle(
+                        overlay, (25, h - 70), (330, h - 20), (0, 140, 255), -1
+                    )
                     result_frame = cv2.addWeighted(overlay, 0.6, result_frame, 0.4, 0)
                     cv2.putText(
                         result_frame,
@@ -327,13 +408,21 @@ class AirDrawingApp:
 
                     thumb_size = 80
                     thumb = cv2.resize(
-                        live_prep_canvas, (thumb_size, thumb_size), interpolation=cv2.INTER_NEAREST
+                        live_prep_canvas,
+                        (thumb_size, thumb_size),
+                        interpolation=cv2.INTER_NEAREST,
                     )
                     thumb_bgr = cv2.cvtColor(thumb, cv2.COLOR_GRAY2BGR)
                     tx1, ty1 = bx1 + 15, by1 + 15
-                    result_frame[ty1 : ty1 + thumb_size, tx1 : tx1 + thumb_size] = thumb_bgr
+                    result_frame[ty1 : ty1 + thumb_size, tx1 : tx1 + thumb_size] = (
+                        thumb_bgr
+                    )
                     cv2.rectangle(
-                        result_frame, (tx1, ty1), (tx1 + thumb_size, ty1 + thumb_size), (180, 180, 180), 1
+                        result_frame,
+                        (tx1, ty1),
+                        (tx1 + thumb_size, ty1 + thumb_size),
+                        (180, 180, 180),
+                        1,
                     )
 
                     for rank, (char_name, prob) in enumerate(top_predictions):
